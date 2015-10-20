@@ -1,0 +1,12 @@
+[
+        {
+                "id":           "address",
+                "label":        "address",
+                "type":         "text",
+        },
+        {
+                "id":           "apikey",
+                "label":        "apikey",
+                "type":         "text",
+        },
+]
