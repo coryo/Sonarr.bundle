@@ -1,5 +1,9 @@
 Basic Sonarr channel for Plex Media Server
 
+**Preferences**
+  * **Address**: server address. should include http and port. `http://myserver.com:8989`
+  * **Api Key**: Get it from Sonarr -> Settings -> General
+
 License
 -------
 
