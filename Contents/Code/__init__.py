@@ -23,7 +23,6 @@ def Start():
         ObjectContainer.title1 = NAME
         HTTP.CacheTime  = 0
         HTTP.User_Agent = 'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/45.0.2454.101 Safari/537.36'
-        HTTP.Headers['X-Api-Key'] = Prefs['apikey']
         Plugin.AddViewGroup("Details", viewMode="InfoList", mediaType="items")
         Plugin.AddViewGroup("Images",  viewMode="Pictures", mediaType="items")
 
@@ -83,7 +82,10 @@ def SeriesList():
         url     = API_URL.format(server=Prefs['address'], endpoint="Series")
         headers = {"X-Api-Key": Prefs['apikey']}
 
-        data = JSON.ObjectFromURL(url, headers=headers)
+        try:
+                data = JSON.ObjectFromURL(url, headers=headers)
+        except:
+                return ErrorMessage(error="Connection", message="unable to access server")
 
         for item in data:
                 title  = item['title']
@@ -105,7 +107,10 @@ def Episode(seriesId):
         url     = API_URL.format(server=Prefs['address'], endpoint="Episode") + "?seriesId=%d" % seriesId
         headers = {"X-Api-Key": Prefs['apikey']}
 
-        data = JSON.ObjectFromURL(url, headers=headers)
+        try:
+                data = JSON.ObjectFromURL(url, headers=headers)
+        except:
+                return ErrorMessage(error="Connection", message="unable to access server")
 
         for episode in data:
                 epnum   = "S{:02d}E{:02d}".format(episode['seasonNumber'], episode['episodeNumber'])
@@ -127,7 +132,7 @@ def Calendar(startDate="", endDate=""):
 
         oc = ObjectContainer(no_cache=True)
 
-        if not startDate:
+        if not startDate or not endDate:
                 now       = Datetime.Now()
                 startDate = (now - Datetime.Delta(days=1)).strftime("%Y-%m-%d")
                 endDate   = (now + Datetime.Delta(days=7)).strftime("%Y-%m-%d")
@@ -153,7 +158,10 @@ def Calendar(startDate="", endDate=""):
         params  = {"start": startDate,
                    "end":   endDate}
 
-        data = JSON.ObjectFromURL(url+"?"+urllib.urlencode(params), headers=headers)
+        try:
+                data = JSON.ObjectFromURL(url+"?"+urllib.urlencode(params), headers=headers)
+        except:
+                return ErrorMessage(error="Connection", message="unable to access server")
 
         lastDate = ""
         for item in data:
@@ -206,18 +214,26 @@ def EpisodeSearch(episodes):
         params  = {"name": "EpisodeSearch",
                    "episodeIds": episodes.split(',')}
 
-        # Sonarr wants JSON encoded post body, plex wants to urlencode it
-        post_req = urllib2.Request(url=apiurl, data=JSON.StringFromObject(params), headers=headers)
-        data     = JSON.ObjectFromString(urllib2.urlopen(post_req).read())
-        Log("POST... " + str(data))
+        try:
+                # Sonarr wants JSON encoded post body, plex wants to urlencode it
+                post_req = urllib2.Request(url=apiurl, data=JSON.StringFromObject(params), headers=headers)
+                data     = JSON.ObjectFromString(urllib2.urlopen(post_req).read())
+        except:
+                return ErrorMessage(error="Connection", message="unable to access server")
 
         # Get the status of the job
-        data = JSON.ObjectFromURL(url=apiurl + "/%d" % data['id'], headers=headers) 
-        Log("GET... " + str(data))
+        try:
+                data = JSON.ObjectFromURL(url=apiurl + "/%d" % data['id'], headers=headers)
+        except:
+                return ErrorMessage(error="Connection", message="unable to access server")
 
         lastMessage = ""
         while data['state'] != 'completed':
-                data    = JSON.ObjectFromURL(url=apiurl + "/%d" % data['id'], headers=headers)
+                try:
+                        data = JSON.ObjectFromURL(url=apiurl + "/%d" % data['id'], headers=headers)
+                except:
+                        return ErrorMessage(error="Connection", message="unable to access server")
+
                 message = data['message'] if 'message' in data else ""
 
                 if message != lastMessage:
@@ -242,7 +258,10 @@ def History(page=1, pageSize=20):
                    "sortDir":  "desc"}
         headers = {"X-Api-Key": Prefs['apikey']}
 
-        data = JSON.ObjectFromURL(url=apiurl+"?"+urllib.urlencode(params), headers=headers)
+        try:
+                data = JSON.ObjectFromURL(url=apiurl+"?"+urllib.urlencode(params), headers=headers)
+        except:
+                return ErrorMessage(error="Connection", message="unable to access server")
 
         for item in data['records']:
 
@@ -267,7 +286,10 @@ def Queue():
         apiurl  = API_URL.format(server=GetServer(), endpoint="Queue")
         headers = {"X-Api-Key": Prefs['apikey']}
 
-        data = JSON.ObjectFromURL(url=apiurl, headers=headers)
+        try:
+                data = JSON.ObjectFromURL(url=apiurl, headers=headers)
+        except:
+                return ErrorMessage(error="Connection", message="unable to access server")
 
         for item in data:
                 Log(item)
@@ -294,3 +316,10 @@ def Void():
 def GetServer():
 
         return Prefs['address'] if not Prefs['address'].endswith("/") else Prefs['address'][:-1]
+
+def ErrorMessage(error, message):
+
+        return ObjectContainer(
+                header  = u'%s' % error,
+                message = u'%s' % message, 
+        )
