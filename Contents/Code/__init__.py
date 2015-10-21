@@ -15,6 +15,52 @@ ICONS = {
         "system":   "icon-system.png",
 }
 
+def ApiRequest(method, endpoint, params=None):
+
+        url     = API_URL.format(server=Prefs['address'], endpoint=endpoint)
+        headers = {"X-Api-Key": Prefs['apikey']}
+        params  = params if params else {}
+
+        try:
+                if method == 'post':
+                        post_req = urllib2.Request(url=url, data=JSON.StringFromObject(params), headers=headers)
+                        data     = JSON.ObjectFromString(urllib2.urlopen(post_req).read())
+                        return data
+                elif method =='get':
+                        data = JSON.ObjectFromURL(url+"?"+urllib.urlencode(params), headers=headers)
+                        return data
+                else:
+                        return {}
+        except: 
+                return {}
+
+# A route to nowhere
+@route(PLEX_PATH + '/void')
+def Void():
+
+        return ObjectContainer()
+
+def GetServer():
+
+        return Prefs['address'] if not Prefs['address'].endswith("/") else Prefs['address'][:-1]
+
+def ErrorMessage(error, message):
+
+        return ObjectContainer(
+                header  = u'%s' % error,
+                message = u'%s' % message, 
+        )                
+
+# for retrieving images from the server with the apikey header
+@route(PLEX_PATH + '/getimage')
+def GetImage(url):
+
+        try:
+                data = HTTP.Request(url=url, headers={"X-Api-Key": Prefs['apikey']}, cacheTime=CACHE_1WEEK).content
+                return DataObject(data, 'image/jpeg')
+        except:
+                return Redirect(R(ICONS['default']))     
+
 ####################################################################################################
 # Main
 ####################################################################################################                 
@@ -23,8 +69,6 @@ def Start():
         ObjectContainer.title1 = NAME
         HTTP.CacheTime  = 0
         HTTP.User_Agent = 'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/45.0.2454.101 Safari/537.36'
-        Plugin.AddViewGroup("Details", viewMode="InfoList", mediaType="items")
-        Plugin.AddViewGroup("Images",  viewMode="Pictures", mediaType="items")
 
 @handler(PLEX_PATH, NAME)
 def MainMenu():       
@@ -64,28 +108,14 @@ def MainMenu():
 
         return oc
 
-# for retrieving images from the server with the apikey header
-@route(PLEX_PATH + '/getimage')
-def GetImage(url):
-
-        try:
-                data = HTTP.Request(url=url, headers={"X-Api-Key": Prefs['apikey']}, cacheTime=CACHE_1WEEK).content
-                return DataObject(data, 'image/jpeg')
-        except:
-                return Redirect(R(ICONS['default']))                
+####################################################################################################
 
 @route(PLEX_PATH + '/serieslist')
 def SeriesList():
 
         oc = ObjectContainer(no_cache=True)
 
-        url     = API_URL.format(server=Prefs['address'], endpoint="Series")
-        headers = {"X-Api-Key": Prefs['apikey']}
-
-        try:
-                data = JSON.ObjectFromURL(url, headers=headers)
-        except:
-                return ErrorMessage(error="Connection", message="unable to access server")
+        data = ApiRequest(method='get', endpoint='series')
 
         for item in data:
                 title  = item['title']
@@ -104,28 +134,43 @@ def Episode(seriesId):
 
         oc = ObjectContainer()
 
-        url     = API_URL.format(server=Prefs['address'], endpoint="Episode") + "?seriesId=%d" % seriesId
-        headers = {"X-Api-Key": Prefs['apikey']}
-
-        try:
-                data = JSON.ObjectFromURL(url, headers=headers)
-        except:
-                return ErrorMessage(error="Connection", message="unable to access server")
+        params = {"seriesId": seriesId}
+        data   = ApiRequest(method='get', endpoint='episode', params=params)
 
         for episode in data:
                 epnum   = "S{:02d}E{:02d}".format(episode['seasonNumber'], episode['episodeNumber'])
                 eptitle = episode['title']
                 hasFile = episode['hasFile']
+                epId    = episode['id']
 
                 status = "✓" if hasFile else "-"
 
                 oc.add(DirectoryObject(
-                        key   = Callback(Void),
+                        key   = Callback(Release, episodeId=epId),
                         title = u'%s %s %s' %(epnum, status, eptitle),
                         thumb = R(ICONS['series'])
                 ))
 
-        return oc       
+        return oc
+
+@route(PLEX_PATH + '/release')
+def Release(episodeId):
+
+        oc = ObjectContainer()
+
+        params = {"episodeId": episodeId}
+        data   = ApiRequest(method='get', endpoint="release", params=params)
+
+        Log(data)
+
+        for item in data:
+                oc.add(DirectoryObject(
+                        key   = Callback(Void),
+                        title = '%s - %s' % (item['indexer'], item['title']),
+                        thumb = R(ICONS['series'])
+                ))
+
+        return oc
 
 @route(PLEX_PATH + '/calendar')
 def Calendar(startDate="", endDate=""):
@@ -153,15 +198,9 @@ def Calendar(startDate="", endDate=""):
                 thumb = R(ICONS['calendar'])
         ))
 
-        url     = API_URL.format(server=Prefs['address'], endpoint="Calendar")
-        headers = {"X-Api-Key": Prefs['apikey']}
-        params  = {"start": startDate,
-                   "end":   endDate}
-
-        try:
-                data = JSON.ObjectFromURL(url+"?"+urllib.urlencode(params), headers=headers)
-        except:
-                return ErrorMessage(error="Connection", message="unable to access server")
+        params = {"start": startDate,
+                  "end":   endDate}
+        data   = ApiRequest(method='get', endpoint='calendar', params=params)
 
         lastDate = ""
         for item in data:
@@ -190,14 +229,16 @@ def Calendar(startDate="", endDate=""):
                                 key     = Callback(Void),
                                 title   = u'%s' % title,
                                 summary = u'%s' % summary,
-                                thumb   = Resource.ContentsOfURLWithFallback(images['poster'], fallback=R(ICONS['default']))
+                                thumb   = Resource.ContentsOfURLWithFallback(images['poster'], fallback=R(ICONS['default'])),
+                                art     = Resource.ContentsOfURLWithFallback(images['fanart'])
                         ))
                 else:
                         oc.add(DirectoryObject(
                                 key     = Callback(EpisodeSearch, episodes=episodeId),
                                 title   = u'%s' % title,
                                 summary = u'%s' % summary,
-                                thumb   = Resource.ContentsOfURLWithFallback(images['poster'], fallback=R(ICONS['default']))
+                                thumb   = Resource.ContentsOfURLWithFallback(images['poster'], fallback=R(ICONS['default'])),
+                                art     = Resource.ContentsOfURLWithFallback(images['fanart'])
                         ))
 
                 lastDate = date
@@ -209,30 +250,19 @@ def EpisodeSearch(episodes):
 
         oc = ObjectContainer()
 
-        apiurl  = API_URL.format(server=GetServer(), endpoint="command")
-        headers = {"X-Api-Key": Prefs['apikey']}
-        params  = {"name": "EpisodeSearch",
-                   "episodeIds": episodes.split(',')}
+        # Send the command
+        params = {"name": "EpisodeSearch",
+                  "episodeIds": episodes.split(',')}
+        data   = ApiRequest(method='post', endpoint='command', params=params)
 
-        try:
-                # Sonarr wants JSON encoded post body, plex wants to urlencode it
-                post_req = urllib2.Request(url=apiurl, data=JSON.StringFromObject(params), headers=headers)
-                data     = JSON.ObjectFromString(urllib2.urlopen(post_req).read())
-        except:
-                return ErrorMessage(error="Connection", message="unable to access server")
+        time.sleep(0.2)
 
-        # Get the status of the job
-        try:
-                data = JSON.ObjectFromURL(url=apiurl + "/%d" % data['id'], headers=headers)
-        except:
-                return ErrorMessage(error="Connection", message="unable to access server")
+        # Check the status
+        data = ApiRequest(method='get', endpoint='command/%d' % data['id'])
 
         lastMessage = ""
         while data['state'] != 'completed':
-                try:
-                        data = JSON.ObjectFromURL(url=apiurl + "/%d" % data['id'], headers=headers)
-                except:
-                        return ErrorMessage(error="Connection", message="unable to access server")
+                data = ApiRequest(method='get', endpoint='command/%d' % data['id'])
 
                 message = data['message'] if 'message' in data else ""
 
@@ -251,17 +281,11 @@ def History(page=1, pageSize=20):
 
         oc = ObjectContainer(no_cache=True)
 
-        apiurl  = API_URL.format(server=GetServer(), endpoint="History")
-        params  = {"page":     page,
-                   "pageSize": pageSize,
-                   "sortKey":  "date",
-                   "sortDir":  "desc"}
-        headers = {"X-Api-Key": Prefs['apikey']}
-
-        try:
-                data = JSON.ObjectFromURL(url=apiurl+"?"+urllib.urlencode(params), headers=headers)
-        except:
-                return ErrorMessage(error="Connection", message="unable to access server")
+        params = {"page":     page,
+                  "pageSize": pageSize,
+                  "sortKey":  "date",
+                  "sortDir":  "desc"}
+        data   = ApiRequest(method='get', endpoint='history', params=params)
 
         for item in data['records']:
 
@@ -283,13 +307,7 @@ def Queue():
 
         oc = ObjectContainer(no_cache=True)
 
-        apiurl  = API_URL.format(server=GetServer(), endpoint="Queue")
-        headers = {"X-Api-Key": Prefs['apikey']}
-
-        try:
-                data = JSON.ObjectFromURL(url=apiurl, headers=headers)
-        except:
-                return ErrorMessage(error="Connection", message="unable to access server")
+        data = ApiRequest(method='get', endpoint='queue')
 
         for item in data:
                 Log(item)
@@ -306,20 +324,3 @@ def Queue():
                 ))
 
         return oc
-
-# A route to nowhere
-@route(PLEX_PATH + '/void')
-def Void():
-
-        return ObjectContainer()
-
-def GetServer():
-
-        return Prefs['address'] if not Prefs['address'].endswith("/") else Prefs['address'][:-1]
-
-def ErrorMessage(error, message):
-
-        return ObjectContainer(
-                header  = u'%s' % error,
-                message = u'%s' % message, 
-        )
