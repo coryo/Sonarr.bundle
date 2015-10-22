@@ -169,7 +169,7 @@ def WantedMissing(page=1, pageSize=20):
         for item in data['records']:
                 airDate = Datetime.ParseDate(item['airDate'])
                 images  = ProcessImages(item['series']['images'])
-                summary = item['overview']
+                summary = item['overview'] if 'overview' in item else "N/A"
 
                 oc.add(DirectoryObject(
                         key   = Callback(EpisodeSearch, episodes=item['id']),
