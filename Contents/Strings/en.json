@@ -5,4 +5,10 @@
         "preferences": "Preferences",
         "queue": "Activity",
         "history": "History",
+        "wanted": "Wanted/Missing",
+        "Success": "Success",
+        "Error": "Error",
+        "Update available: %s": "Update available: %s",
+        "Install latest version of the channel.": "Install latest version of the channel.",
+        "Channel updated to version %s": "Channel updated to version %s"
 }

@@ -2,6 +2,15 @@
 <!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+        <!-- Current bundle version -->
+        <key>CFBundleVersion</key>
+        <string>0.1</string>
+        <!-- Path to your latest bundle info -->
+        <key>PlexPluginVersionUrl</key>
+        <string>https://api.github.com/repos/coryo/Sonarr.bundle/releases/latest</string>
+        <!-- Required for updater -->
+        <key>PlexPluginCodePolicy</key>
+        <string>Elevated</string>
         <key>CFBundleIdentifier</key>
         <string>com.plexapp.plugins.sonarr</string>
         <key>PlexClientPlatforms</key>
