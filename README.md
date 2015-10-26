@@ -3,6 +3,12 @@ Basic Sonarr channel for Plex Media Server
 **Preferences**
   * **Address**: server address. should include http and port. `http://myserver.com:8989`
   * **Api Key**: Get it from Sonarr -> Settings -> General
+  * **Use Local Time**: Use the local timezone throughout the channel. otherwise UTC.
+  * **Calendar: Show Day Dividers**: Add a divider between days in the calendar listing.
+  * **Calendar: Show Navigation**: Add a previous and next button at the top of the calendar listing.
+  * **Calendar: Number of Days Prior to Today to Start**: 0 will start it today. 1 will start it 1 day ago.
+    - useful if you watch shows a day or two later, or if you want to check status past midnight.
+  * **Calendar: Days Per Page**: Number of days to include in the calendar list.
 
 License
 -------
