@@ -9,4 +9,36 @@
                 "label":        "apikey",
                 "type":         "text",
         },
+        {
+                "id":           "uselocaltime",
+                "label":        "uselocaltime",
+                "type":         "bool",
+                "default":       "True",
+        },
+        {
+                "id":           "calendardividers",
+                "label":        "calendardividers",
+                "type":         "bool",
+                "default":      "False",
+        },
+        {
+                "id":           "calendarnav",
+                "label":        "calendarnav",
+                "type":         "bool",
+                "default":      "True",
+        },
+        {
+                "id":           "calendarstartday",
+                "label":        "calendarstartday",
+                "type":         "enum",
+                "values":       ["0", "1", "2", "3", "4", "5", "6", "7"],
+                "default":      "1",
+        },
+        {
+                "id":           "calendardays",
+                "label":        "calendardays",
+                "type":         "enum",
+                "values":       ["1", "2", "3", "4", "5", "6", "7", "14", "21", "28"],
+                "default":      "7",
+        },
 ]

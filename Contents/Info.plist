@@ -4,7 +4,7 @@
 <dict>
         <!-- Current bundle version -->
         <key>CFBundleVersion</key>
-        <string>0.3</string>
+        <string>0.4</string>
         <!-- Path to your latest bundle info -->
         <key>PlexPluginVersionUrl</key>
         <string>https://api.github.com/repos/coryo/Sonarr.bundle/releases/latest</string>
