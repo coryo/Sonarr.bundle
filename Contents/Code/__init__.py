@@ -4,154 +4,8 @@
 # https://github.com/coryo/Sonarr.bundle
 # https://github.com/Sonarr/Sonarr/wiki/API
 
-import urllib, urllib2, time, calendar
 from updater import Updater
-
-NAME       = 'Sonarr'
-PLEX_PATH  = '/video/sonarr'
-
-API_URL  = "{server}/api/{endpoint}"
-
-ICONS = {
-        "default":  "sonarr-content-icon.png",
-        "series":   "icon-series.png",
-        "calendar": "icon-calendar.png",
-        "activity": "icon-activity.png",
-        "wanted":   "icon-wanted.png",
-        "settings": "icon-settings.png",
-        "system":   "icon-system.png",
-}
-
-def ApiRequest(method, endpoint, params=None, cacheTime=0):
-
-        url     = API_URL.format(server=Prefs['address'], endpoint=endpoint)
-        headers = {"X-Api-Key": Prefs['apikey']}
-
-        data = {}
-        try:
-                if method == 'post':
-                        # plex's JSON.ObjectFromURL will only urlencode a python dict as the post body. sonarr wants JSON encoded body.
-                        req  = urllib2.Request(url=url, data=JSON.StringFromObject(params), headers=headers)
-                        data = JSON.ObjectFromString(urllib2.urlopen(req).read())
-                elif method == 'get':
-                        # parameters url encoded. ex: api/Episode?seasonId={id}
-                        url  = "%s?%s" % (url,urllib.urlencode(params)) if params else url
-                        data = JSON.ObjectFromURL(url, headers=headers, cacheTime=cacheTime)
-        except: pass
-
-        return data
-
-# A route to nowhere
-@route(PLEX_PATH + '/void')
-def Void():
-
-        return ObjectContainer()
-
-def GetServer():
-
-        return Prefs['address'] if not Prefs['address'].endswith("/") else Prefs['address'][:-1]
-
-def ErrorMessage(error, message):
-
-        return ObjectContainer(
-                header  = u'%s' % error,
-                message = u'%s' % message, 
-        )                
-
-# for retrieving images from the server with the apikey header
-@route(PLEX_PATH + '/getimage')
-def GetImage(url):
-
-        try:
-                data = HTTP.Request(url=url, headers={"X-Api-Key": Prefs['apikey']} if Prefs['address'] in url else {}, cacheTime=CACHE_1WEEK).content
-                return DataObject(data, 'image/jpeg')
-        except:
-                return Redirect(R(ICONS['default']))     
-
-# images comes as a list of objects. Turn it into a dict with key=image type, value=url. also prepend the server url if its a relative path.
-def ProcessImages(images):
-
-        return {
-                imageType['coverType']: (imageType['url'] if not imageType['url'].startswith("/") else GetServer()+"/api"+imageType['url']) for imageType in images
-        }
-
-def QueueSize():
-
-        return len(ApiRequest(method='get', endpoint='queue'))
-
-def WantedMissingSize():
-
-        params = {'page':1, 'pageSize':1, 'sortKey':'airDateUtc', 'sortDir':'desc'}
-        try:
-                x = int(ApiRequest(method='get', endpoint='wanted/missing', params=params)['totalRecords'])
-                return x
-        except:
-                return 0
-        
-# make human readable sizes from bytes
-def sizeof_fmt(num, suffix='B'):
-
-        for unit in ['','Ki','Mi','Gi','Ti','Pi','Ei','Zi']:
-                if abs(num) < 1024.0:
-                        return "%3.1f%s%s" % (num, unit, suffix)
-                num = num/1024.0
-        return "%.1f%s%s" % (num, 'Yi', suffix)
-
-# convert UTC timestamps to local time. requires import calendar
-def utc_to_local(utc_dt):
-        timestamp = calendar.timegm(utc_dt.timetuple())
-        local_dt = Datetime.FromTimestamp(timestamp)
-        assert utc_dt.resolution >= Datetime.Delta(microseconds=1)
-        return local_dt.replace(microsecond=utc_dt.microsecond)
-
-# plex clients support unicode. given an airtime, give an approximate unicode clock symbol
-def AirTimeToUnicodeClocks(airtime):
-        # clients that don't like these characters
-        if Client.Platform in ['Plex Home Theater']: return "⚫"
-
-        hour = airtime.hour-12 if airtime.hour > 11 else airtime.hour
-        # there are only :00 and :30 clocks. use the nearest one.
-        if airtime.minute in (x for y in (range(45,60), range(0,15)) for x in y):
-                return {
-                        0:"🕛",
-                        1:"🕐",
-                        2:"🕑",
-                        3:"🕒",
-                        4:"🕓",
-                        5:"🕔",
-                        6:"🕕",
-                        7:"🕖",
-                        8:"🕗",
-                        9:"🕘",
-                        10:"🕙",
-                        11:"🕚",
-                }[hour]
-        else:
-                return {
-                        0:"🕧",
-                        1:"🕜",
-                        2:"🕝",
-                        3:"🕞",
-                        4:"🕟",
-                        5:"🕠",
-                        6:"🕡",
-                        7:"🕢",
-                        8:"🕣",
-                        9:"🕤",
-                        10:"🕥",
-                        11:"🕦",
-                }[hour]    
-
-def IsInQueue(episodeId):
-
-        data = ApiRequest(method='get', endpoint='queue', cacheTime=2)
-
-        for item in data:
-                if item['episode']['id'] == episodeId:
-                        timeleft = time.strptime(item['timeleft'], "%H:%M:%S.%f") if 'timeleft' in item else time.localtime(0)
-                        return (True, timeleft)
-
-        return (False, None)
+from shared import *
 
 ####################################################################################################
 # Main
@@ -170,7 +24,7 @@ def MainMenu():
         oc = ObjectContainer(no_cache=True)
 
         Updater(PLEX_PATH+'/updater', oc)
-        DisplayAlerts(oc)
+        AppendAlertsToContainer(oc)
 
         if Prefs['address'] and Prefs['apikey']:
                 oc.add(DirectoryObject(
@@ -219,13 +73,29 @@ def MainMenu():
         return oc
 
 ####################################################################################################
+# ROUTES
+####################################################################################################
+# A route to nowhere
+@route(PLEX_PATH + '/void')
+def Void():
+
+        return ObjectContainer()
+
+# for retrieving images from the server with the apikey header
+@route(PLEX_PATH + '/getimage')
+def GetImage(url):
+
+        try:
+                data = HTTP.Request(url=url, headers={"X-Api-Key": Prefs['apikey']} if Prefs['address'] in url else {}, cacheTime=CACHE_1WEEK).content
+                return DataObject(data, 'image/jpeg')
+        except:
+                return Redirect(R(ICONS['default'])) 
 
 # Lists Episodes without files
 @route(PLEX_PATH + '/wantedmissing/{pageSize}/{page}', page=int, pageSize=int)
 def WantedMissing(page=1, pageSize=20):
 
         oc = ObjectContainer(title2=L('wanted'))
-        DisplayAlerts(oc)
 
         params = {'page':     page,
                   'pageSize': pageSize,
@@ -250,7 +120,6 @@ def WantedMissing(page=1, pageSize=20):
 def Series():
 
         oc = ObjectContainer(title2=L('series'), no_cache=True)
-        DisplayAlerts(oc)
 
         data = ApiRequest(method='get', endpoint='series')
 
@@ -271,7 +140,6 @@ def Series():
 def Seasons(title, seriesId):
 
         oc = ObjectContainer(title2=title)
-        DisplayAlerts(oc)
 
         data = ApiRequest(method='get', endpoint='episode', params={"seriesId": seriesId}, cacheTime=10)
 
@@ -290,7 +158,6 @@ def Seasons(title, seriesId):
 def Season(seriesId, seasonNumber):
 
         oc = ObjectContainer(title2='%s %d'%(L('season'), seasonNumber))
-        DisplayAlerts(oc)
 
         data = ApiRequest(method='get', endpoint='episode', params={"seriesId": seriesId}, cacheTime=10)
 
@@ -307,7 +174,6 @@ def Season(seriesId, seasonNumber):
 def Release(episodeId):
 
         oc = ObjectContainer()
-        DisplayAlerts(oc)
 
         data = ApiRequest(method='get', endpoint="release", params={"episodeId": episodeId})
 
@@ -323,8 +189,7 @@ def Release(episodeId):
 @route(PLEX_PATH + '/calendar')
 def Calendar(startDate=None, endDate=None):
 
-        oc = ObjectContainer(title2=L("calendar"), no_cache=True)
-        DisplayAlerts(oc)
+        oc = ObjectContainer(title2=L("calendar"))
 
         start_offset = int(Prefs['calendarstartday'])
         total_days   = int(Prefs['calendardays'])
@@ -370,55 +235,6 @@ def Calendar(startDate=None, endDate=None):
 
         return oc
 
-def AppendEpisodeToContainer(calendarItem, oc, titleFormat='status,date,time,show,epnum,title'):
-
-        episodeId     = calendarItem['id']
-        episodeFileId = calendarItem['episodeFileId']
-        seriesType    = calendarItem['series']['seriesType']
-        images        = ProcessImages(calendarItem['series']['images'])
-        dateUtc       = Datetime.ParseDate(calendarItem['airDateUtc'])
-        hasFile       = calendarItem['hasFile']  if 'hasFile'  in calendarItem else False
-        summary       = calendarItem['overview'] if 'overview' in calendarItem else "N/A"
-
-        isDownloading = False
-        date = utc_to_local(dateUtc) if Prefs['uselocaltime'] else dateUtc
-
-        if hasFile:
-                status = u"✓"
-        else:
-                aired = utc_to_local(dateUtc) + Datetime.Delta(minutes=calendarItem['series']['runtime']) < Datetime.Now()
-                if aired:
-                        isDownloading,timeLeft = IsInQueue(episodeId)
-                        status = u"▼ %dm %ds"%(timeLeft.tm_min, timeLeft.tm_sec) if (isDownloading and timeLeft) else u"✖"
-                else:   
-                        status = AirTimeToUnicodeClocks(date)
-
-        titleElements = {
-                'date':   date.strftime("%a"),
-                'time':   date.strftime('%H:%M'),
-                'status': status,
-                'epnum':  'S{:02d}E{:02d}'.format(calendarItem['seasonNumber'], calendarItem['episodeNumber']) if seriesType == 'standard' else "",
-                'show':   calendarItem['series']['title'],
-                'title':  calendarItem['title'],
-        }
-        title = ' - '.join([titleElements[x] for x in titleFormat.split(',') if titleElements[x]])
-
-        do = DirectoryObject()
-
-        if hasFile:
-                do.key = Callback(EpisodeFile, episodeFileId=episodeFileId)
-        elif isDownloading:
-                do.key = Callback(Void)
-        else:
-                do.key = Callback(EpisodeSearch, episodes=episodeId)
-
-        do.title   = u'%s' % title
-        do.summary = u'%s' % summary
-        do.thumb   = Callback(GetImage, url=images['poster'])
-        do.art     = Callback(GetImage, url=images['fanart'])
-
-        oc.add(do)
-
 # Sonarr does an automatic search for the given episodes. episodes is CSV episodeIds
 @route(PLEX_PATH + '/EpisodeSearch/{episodes}')
 def EpisodeSearch(episodes):
@@ -430,53 +246,20 @@ def EpisodeSearch(episodes):
                   "episodeIds": episodes.split(',')}
         data   = ApiRequest(method='post', endpoint='command', params=params)
 
-        if not data:
-                return oc
-
-        Thread.Create(StatusChecker, commandId=data['id'])
-
+        if data:
+                Thread.Create(StatusChecker, commandId=data['id'])
+        
         return oc
-
-def StatusChecker(commandId, commandDescription=None, pollRate=0.5):
-
-        # Check the status
-        data = ApiRequest(method='get', endpoint='command/%d' % commandId)
-        commandName = data['body']['name']
-        messages = set()
-        lastData = None
-        while data:
-                time.sleep(pollRate)
-                data = ApiRequest(method='get', endpoint='command/%d' % commandId)
-
-                if data == lastData:
-                        continue
-                        
-                startTime = data['stateChangeTime'] if 'stateChangeTime' in data else data['startedOn']
-                message = data['message'] if 'message' in data else "..."
-                messages.add((startTime, message))
-
-                if data['state'] == 'completed':
-                        Dict['alerts'].append({'command': commandName, 'id': commandId, 'messages': messages})
-                        Dict.Save()
-                        return
-
-                lastData = data
-
-def DisplayAlerts(oc):
-          
-        for x,alert in enumerate(Dict['alerts']):
-                oc.add(DirectoryObject(
-                        key   = Callback(CommandLog, x=x),
-                        title = "%s #%s" % (alert['command'], alert['id']),
-                        thumb = R(ICONS['wanted'])
-                )) 
 
 @route(PLEX_PATH + '/commandlog', x=int)
 def CommandLog(x):
 
-        oc = ObjectContainer()
+        try:
+                alert = Dict['alerts'][x]
+        except: 
+                return Void()
 
-        alert = Dict['alerts'][x]
+        oc = ObjectContainer()
         for time,message in alert['messages']:
                 oc.add(DirectoryObject(
                         key   = Callback(Void),
@@ -492,7 +275,6 @@ def CommandLog(x):
 def History(page=1, pageSize=20, sortKey="date", sortDir="desc"):
 
         oc = ObjectContainer(title2=L('history'), no_cache=True)
-        DisplayAlerts(oc)
 
         data = ApiRequest(method='get', endpoint='history', params={"page":page, "pageSize":pageSize, "sortKey":sortKey, "sortDir":sortDir})
 
@@ -516,7 +298,6 @@ def History(page=1, pageSize=20, sortKey="date", sortDir="desc"):
 def Queue():
 
         oc = ObjectContainer(title2=L('queue'), no_cache=True)
-        DisplayAlerts(oc)
 
         data = ApiRequest(method='get', endpoint='queue')
 
@@ -568,3 +349,64 @@ def EpisodeFile(episodeFileId):
                 except: pass
         
         return oc
+
+####################################################################################################
+# Functions for appending items to ObjectContainers
+####################################################################################################
+def AppendAlertsToContainer(oc):
+          
+        for x,alert in enumerate(Dict['alerts']):
+                oc.add(DirectoryObject(
+                        key   = Callback(CommandLog, x=x),
+                        title = "%s #%s" % (alert['command'], alert['id']),
+                        thumb = R(ICONS['wanted'])
+                ))
+
+def AppendEpisodeToContainer(calendarItem, oc, titleFormat='status,date,time,show,epnum,title'):
+
+        episodeId     = calendarItem['id']
+        episodeFileId = calendarItem['episodeFileId']
+        seriesType    = calendarItem['series']['seriesType']
+        images        = ProcessImages(calendarItem['series']['images'])
+        dateUtc       = Datetime.ParseDate(calendarItem['airDateUtc'])
+        hasFile       = calendarItem['hasFile']  if 'hasFile'  in calendarItem else False
+        summary       = calendarItem['overview'] if 'overview' in calendarItem else "N/A"
+
+        isDownloading = False
+        date = utc_to_local(dateUtc) if Prefs['uselocaltime'] else dateUtc
+
+        if hasFile:
+                status = u"✓"
+        else:
+                aired = utc_to_local(dateUtc) + Datetime.Delta(minutes=calendarItem['series']['runtime']) < Datetime.Now()
+                if aired:
+                        isDownloading,timeLeft = IsInQueue(episodeId)
+                        status = u"▼ %dm %ds"%(timeLeft.tm_min, timeLeft.tm_sec) if (isDownloading and timeLeft) else u"✖"
+                else:   
+                        status = AirTimeToUnicodeClocks(date)
+
+        titleElements = {
+                'date':   date.strftime("%a"),
+                'time':   date.strftime('%H:%M'),
+                'status': status,
+                'epnum':  'S{:02d}E{:02d}'.format(calendarItem['seasonNumber'], calendarItem['episodeNumber']) if seriesType == 'standard' else None,
+                'show':   calendarItem['series']['title'],
+                'title':  calendarItem['title'],
+        }
+        title = ' - '.join([titleElements[x] for x in titleFormat.split(',') if titleElements[x]])
+
+        do = DirectoryObject()
+
+        if hasFile:
+                do.key = Callback(EpisodeFile, episodeFileId=episodeFileId)
+        elif isDownloading:
+                do.key = Callback(Queue)
+        else:
+                do.key = Callback(EpisodeSearch, episodes=episodeId)
+
+        do.title   = u'%s' % title
+        do.summary = u'%s' % summary
+        do.thumb   = Callback(GetImage, url=images['poster'])
+        do.art     = Callback(GetImage, url=images['fanart'])
+
+        oc.add(do)
