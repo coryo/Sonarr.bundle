@@ -1,4 +1,6 @@
 {
+        "address": "Address",
+        "apikey": "API Key",
         "series": "Series",
         "search": "Search",
         "calendar": "Calendar",
