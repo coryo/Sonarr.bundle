@@ -1,4 +1,6 @@
-import urllib, urllib2, time, calendar
+from time import strptime, sleep
+from calendar import timegm
+from json import loads
 
 NAME       = 'Sonarr'
 PLEX_PATH  = '/video/sonarr'
@@ -23,16 +25,19 @@ def ApiRequest(method, endpoint, params=None, cacheTime=0):
         data = {}
         try:
                 if method == 'post':
-                        # plex's JSON.ObjectFromURL will only urlencode a python dict as the post body. sonarr wants JSON encoded body.
-                        req  = urllib2.Request(url=url, data=JSON.StringFromObject(params), headers=headers)
-                        data = JSON.ObjectFromString(urllib2.urlopen(req).read())
+                        data = JSON.ObjectFromString(HTTP.Request(url=url, data=JSON.StringFromObject(params), headers=headers).content)
                 elif method == 'get':
-                        # parameters url encoded. ex: api/Episode?seasonId={id}
-                        url  = "%s?%s" % (url,urllib.urlencode(params)) if params else url
-                        data = JSON.ObjectFromURL(url, headers=headers, cacheTime=cacheTime)
-        except: pass
+                        # dont use plex's JSON object from string because it has a fixed limit on the size of a string.
+                        # some api calls (such as /episode) can exceed the limit.
+                        data = loads(HTTP.Request(url=UrlEncode(url,params), headers=headers, cacheTime=cacheTime).content)
+        except Exception, e:
+                Log(e)
 
-        return data
+        return data  
+
+def UrlEncode(url, params):
+
+        return '%s?%s' % (url, '&'.join(["%s=%s" % (k,v) for k,v in params.iteritems()])) if params else url
 
 def GetServer():
 
@@ -49,7 +54,7 @@ def ErrorMessage(error, message):
 def ProcessImages(images):
 
         return {
-                imageType['coverType']: (imageType['url'] if not imageType['url'].startswith("/") else GetServer()+"/api"+imageType['url']) for imageType in images
+                img['coverType']: (img['url'] if not img['url'].startswith("/") else GetServer()+"/api"+img['url']) for img in images
         }
 
 def QueueSize():
@@ -74,9 +79,9 @@ def sizeof_fmt(num, suffix='B'):
                 num = num/1024.0
         return "%.1f%s%s" % (num, 'Yi', suffix)
 
-# convert UTC timestamps to local time. requires import calendar
+# convert UTC timestamps to local time.
 def utc_to_local(utc_dt):
-        timestamp = calendar.timegm(utc_dt.timetuple())
+        timestamp = timegm(utc_dt.timetuple())
         local_dt = Datetime.FromTimestamp(timestamp)
         assert utc_dt.resolution >= Datetime.Delta(microseconds=1)
         return local_dt.replace(microsecond=utc_dt.microsecond)
@@ -90,56 +95,36 @@ def AirTimeToUnicodeClocks(airtime):
         # there are only :00 and :30 clocks. use the nearest one.
         if airtime.minute in (x for y in (range(45,60), range(0,15)) for x in y):
                 return {
-                        0:"🕛",
-                        1:"🕐",
-                        2:"🕑",
-                        3:"🕒",
-                        4:"🕓",
-                        5:"🕔",
-                        6:"🕕",
-                        7:"🕖",
-                        8:"🕗",
-                        9:"🕘",
-                        10:"🕙",
-                        11:"🕚",
+                        0:"🕛", 1:"🕐", 2:"🕑", 3:"🕒", 4: "🕓", 5: "🕔",
+                        6:"🕕", 7:"🕖", 8:"🕗", 9:"🕘", 10:"🕙", 11:"🕚",
                 }[hour]
         else:
                 return {
-                        0:"🕧",
-                        1:"🕜",
-                        2:"🕝",
-                        3:"🕞",
-                        4:"🕟",
-                        5:"🕠",
-                        6:"🕡",
-                        7:"🕢",
-                        8:"🕣",
-                        9:"🕤",
-                        10:"🕥",
-                        11:"🕦",
+                        0:"🕧", 1:"🕜", 2:"🕝", 3:"🕞", 4: "🕟", 5: "🕠",
+                        6:"🕡", 7:"🕢", 8:"🕣", 9:"🕤", 10:"🕥", 11:"🕦",
                 }[hour]    
 
 def IsInQueue(episodeId):
 
-        data = ApiRequest(method='get', endpoint='queue', cacheTime=2)
+        data = ApiRequest(method='get', endpoint='queue', cacheTime=CACHE_1MINUTE)
 
         for item in data:
                 if item['episode']['id'] == episodeId:
-                        timeleft = time.strptime(item['timeleft'].split('.')[0], "%H:%M:%S") if 'timeleft' in item else time.localtime(0)
+                        timeleft = strptime(item['timeleft'].split('.')[0], "%H:%M:%S") if 'timeleft' in item else time.localtime(0)
                         return (True, timeleft)
 
         return (False, None)
 
-def StatusChecker(commandId, commandDescription=None, pollRate=0.5):
+def StatusChecker(commandId, commandDescription=None, pollRate=0.5, maxPolls=30):
 
         # Check the status
-        data = ApiRequest(method='get', endpoint='command/%d' % commandId)
+        data = ApiRequest(method='get', endpoint='command/%d' % commandId, cacheTime=0)
         commandName = data['body']['name']
         messages = set()
         lastData = None
-        while data:
-                time.sleep(pollRate)
-                data = ApiRequest(method='get', endpoint='command/%d' % commandId)
+        for x in xrange(maxPolls):
+                sleep(pollRate)
+                data = ApiRequest(method='get', endpoint='command/%d' % commandId, cacheTime=0)
 
                 if data == lastData:
                         continue

@@ -24,7 +24,6 @@ def MainMenu():
         oc = ObjectContainer(no_cache=True)
 
         Updater(PLEX_PATH+'/updater', oc)
-        AppendAlertsToContainer(oc)
 
         if Prefs['address'] and Prefs['apikey']:
                 oc.add(DirectoryObject(
@@ -56,6 +55,13 @@ def MainMenu():
                         title = u'%s (%d)' % (L('wanted'), WantedMissingSize()),
                         thumb = R(ICONS['wanted'])
                 ))
+
+                if len(Dict['alerts']) > 0:
+                        oc.add(DirectoryObject(
+                                key   = Callback(Messages),
+                                title = u'%s (%d)' % (L('messages'), len(Dict['alerts'])),
+                                thumb = R(ICONS['wanted'])
+                        ))
         else:
                 oc.add(DirectoryObject(
                         key   = Callback(Void),
@@ -121,7 +127,7 @@ def Series():
 
         oc = ObjectContainer(title2=L('series'), no_cache=True)
 
-        data = ApiRequest(method='get', endpoint='series')
+        data = ApiRequest(method='get', endpoint='series', cacheTime=CACHE_1HOUR)
 
         for item in data:
                 title  = item['title']
@@ -135,20 +141,17 @@ def Series():
 
         return oc
 
-# This may timeout on very large shows
 @route(PLEX_PATH + '/seasons/{seriesId}', seriesId=int)
 def Seasons(title, seriesId):
 
         oc = ObjectContainer(title2=title)
 
-        data = ApiRequest(method='get', endpoint='episode', params={"seriesId": seriesId}, cacheTime=10)
+        data = ApiRequest(method='get', endpoint='series/%d'%seriesId, cacheTime=CACHE_1HOUR)
 
-        seasons = set(episode['seasonNumber'] for episode in data)
-
-        for season in list(reversed(list(seasons))):
+        for season in list(reversed(data['seasons'])):
                 oc.add(DirectoryObject(
-                        key   = Callback(Season, seriesId=seriesId, seasonNumber=season),
-                        title = "%s %d" % (L("season"), season),
+                        key   = Callback(Season, seriesId=seriesId, seasonNumber=season['seasonNumber']),
+                        title = "%s %d" % (L("season"), season['seasonNumber']),
                         thumb = R(ICONS['default'])
                 ))
 
@@ -159,7 +162,7 @@ def Season(seriesId, seasonNumber):
 
         oc = ObjectContainer(title2='%s %d'%(L('season'), seasonNumber))
 
-        data = ApiRequest(method='get', endpoint='episode', params={"seriesId": seriesId}, cacheTime=10)
+        data = ApiRequest(method='get', endpoint='episode', params={"seriesId": seriesId}, cacheTime=CACHE_1HOUR)
 
         for episode in list(reversed(data)):
                 if episode['seasonNumber'] != seasonNumber:
@@ -175,12 +178,18 @@ def Release(episodeId):
 
         oc = ObjectContainer()
 
-        data = ApiRequest(method='get', endpoint="release", params={"episodeId": episodeId})
+        data = ApiRequest(method='get', endpoint="release", params={"episodeId": episodeId, "sort_by": "releaseWeight", "order": "asc"})
 
-        for item in data:
+        Dict['releases'] = []
+
+        for i,release in enumerate(data):
+
+                rejections = release['rejections'] if 'rejections' in release else []
+                summary = ' - '.join(rejections)
                 oc.add(DirectoryObject(
                         key   = Callback(Void),
-                        title = '%s - %s' % (item['indexer'], item['title']),
+                        title = '%s - %s' % (release['indexer'], release['title']),
+                        summary = summary,
                         thumb = R(ICONS['series'])
                 ))
 
@@ -195,23 +204,23 @@ def Calendar(startDate=None, endDate=None):
         total_days   = int(Prefs['calendardays'])
 
         if not startDate or not endDate:
-                now       = Datetime.Now()
-                startDate = (now - Datetime.Delta(days=start_offset)).strftime("%Y-%m-%d")
-                endDate   = (now + Datetime.Delta(days=total_days-start_offset)).strftime("%Y-%m-%d")
+                now       = Datetime.UTCNow()
+                startDate = (now - Datetime.Delta(days=start_offset)).strftime("%Y-%m-%dT%H:%M:%SZ")
+                endDate   = (now + Datetime.Delta(days=1+total_days-start_offset)).strftime("%Y-%m-%dT00:00:00Z")
 
         start_dt = Datetime.ParseDate(startDate)
         end_dt   = Datetime.ParseDate(endDate)
 
         if Prefs['calendarnav']:
                 oc.add(DirectoryObject(
-                        key = Callback(Calendar, startDate = (start_dt - Datetime.Delta(days=total_days)).strftime("%Y-%m-%d"),
-                                                 endDate   = (end_dt   - Datetime.Delta(days=total_days)).strftime("%Y-%m-%d")),
+                        key = Callback(Calendar, startDate = (start_dt - Datetime.Delta(days=total_days)).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                                                 endDate   = (end_dt   - Datetime.Delta(days=total_days)).strftime("%Y-%m-%dT00:00:00Z")),
                         title = "<< Back %d Day(s)" % total_days,
                         thumb = R(ICONS['calendar'])
                 ))
                 oc.add(DirectoryObject(
-                        key = Callback(Calendar, startDate = (start_dt + Datetime.Delta(days=total_days)).strftime("%Y-%m-%d"),
-                                                 endDate   = (end_dt   + Datetime.Delta(days=total_days)).strftime("%Y-%m-%d")),
+                        key = Callback(Calendar, startDate = (start_dt + Datetime.Delta(days=total_days)).strftime("%Y-%m-%d%H:%M:%SZ"),
+                                                 endDate   = (end_dt   + Datetime.Delta(days=total_days)).strftime("%Y-%m-%dT00:00:00Z")),
                         title = "Next %d Day(s) >>" % total_days,
                         thumb = R(ICONS['calendar'])
                 ))
@@ -269,8 +278,6 @@ def CommandLog(x):
 
         return oc
 
-
-# sortKey = "series.title" or "date"
 @route(PLEX_PATH + '/history', page=int, pageSize=int)
 def History(page=1, pageSize=20, sortKey="date", sortDir="desc"):
 
@@ -350,6 +357,15 @@ def EpisodeFile(episodeFileId):
         
         return oc
 
+@route(PLEX_PATH + '/messages')
+def Messages():
+
+        oc = ObjectContainer(title2=L('messages'))
+
+        AppendAlertsToContainer(oc)
+        
+        return oc
+
 ####################################################################################################
 # Functions for appending items to ObjectContainers
 ####################################################################################################
@@ -362,15 +378,15 @@ def AppendAlertsToContainer(oc):
                         thumb = R(ICONS['wanted'])
                 ))
 
-def AppendEpisodeToContainer(calendarItem, oc, titleFormat='status,date,time,show,epnum,title'):
+def AppendEpisodeToContainer(episode, oc, titleFormat='status,date,time,show,epnum,title'):
 
-        episodeId     = calendarItem['id']
-        episodeFileId = calendarItem['episodeFileId']
-        seriesType    = calendarItem['series']['seriesType']
-        images        = ProcessImages(calendarItem['series']['images'])
-        dateUtc       = Datetime.ParseDate(calendarItem['airDateUtc'])
-        hasFile       = calendarItem['hasFile']  if 'hasFile'  in calendarItem else False
-        summary       = calendarItem['overview'] if 'overview' in calendarItem else "N/A"
+        episodeId     = episode['id']
+        episodeFileId = episode['episodeFileId']
+        seriesType    = episode['series']['seriesType']
+        images        = ProcessImages(episode['series']['images'])
+        dateUtc       = Datetime.ParseDate(episode['airDateUtc'])
+        hasFile       = episode['hasFile']  if 'hasFile'  in episode else False
+        summary       = episode['overview'] if 'overview' in episode else "N/A"
 
         isDownloading = False
         date = utc_to_local(dateUtc) if Prefs['uselocaltime'] else dateUtc
@@ -378,7 +394,7 @@ def AppendEpisodeToContainer(calendarItem, oc, titleFormat='status,date,time,sho
         if hasFile:
                 status = u"✓"
         else:
-                aired = utc_to_local(dateUtc) + Datetime.Delta(minutes=calendarItem['series']['runtime']) < Datetime.Now()
+                aired = utc_to_local(dateUtc) + Datetime.Delta(minutes=episode['series']['runtime']) < Datetime.Now()
                 if aired:
                         isDownloading,timeLeft = IsInQueue(episodeId)
                         status = u"▼ %dm %ds"%(timeLeft.tm_min, timeLeft.tm_sec) if (isDownloading and timeLeft) else u"✖"
@@ -389,9 +405,9 @@ def AppendEpisodeToContainer(calendarItem, oc, titleFormat='status,date,time,sho
                 'date':   date.strftime("%a"),
                 'time':   date.strftime('%H:%M'),
                 'status': status,
-                'epnum':  'S{:02d}E{:02d}'.format(calendarItem['seasonNumber'], calendarItem['episodeNumber']) if seriesType == 'standard' else None,
-                'show':   calendarItem['series']['title'],
-                'title':  calendarItem['title'],
+                'epnum':  'S{:02d}E{:02d}'.format(episode['seasonNumber'], episode['episodeNumber']) if seriesType in ['standard', 'anime'] else None,
+                'show':   episode['series']['title'],
+                'title':  episode['title'],
         }
         title = ' - '.join([titleElements[x] for x in titleFormat.split(',') if titleElements[x]])
 
